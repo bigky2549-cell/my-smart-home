@@ -16,8 +16,11 @@
         button { padding: 12px 30px; border-radius: 12px; border: none; font-size: 1rem; cursor: pointer; transition: 0.3s; font-family: 'Kanit', sans-serif; }
         .btn-on { background-color: #22c55e; color: white; }
         .btn-off { background-color: #ef4444; color: white; }
+        .btn-on:hover { background-color: #16a34a; }
+        .btn-off:hover { background-color: #dc2626; }
         .status-box { margin-top: 10px; font-size: 0.9rem; padding: 5px 10px; border-radius: 5px; background: #334155; display: inline-block; }
-        .warning { color: #ef4444; font-weight: bold; }
+        .warning { background-color: #ef4444 !important; color: white; font-weight: bold; animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -72,6 +75,7 @@
     </div>
 
     <script>
+        // *** ตรวจสอบว่า Config นี้ตรงกับในบอร์ด NodeMCU ***
         const firebaseConfig = {
             apiKey: "AIzaSyDVK0e02FBue3EW0e7JqbCKPe6YE7zREqE",
             authDomain: "mini-project-2fa5e.firebaseapp.com",
@@ -85,28 +89,40 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // ดึงค่าเซนเซอร์
+        // 1. ดึงค่าเซนเซอร์จาก Path "room"
         db.ref("room").on("value", (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                document.getElementById("temp").innerText = data.temp || "--";
-                document.getElementById("humi").innerText = data.humi || "--";
-                document.getElementById("light_val").innerText = data.light || "--";
-                
-                // อัปเดตค่าควัน/แก๊ส
-                document.getElementById("gas_val").innerText = data.gas || "--";
-                const gasStatus = document.getElementById("gas_status");
-                if (data.gas > 400) { // ปรับตัวเลข 400 ตามความแรงของเซนเซอร์
-                    gasStatus.innerText = "⚠️ ตรวจพบควัน!";
-                    gasStatus.className = "status-box warning";
+                // อัปเดตตัวเลข
+                document.getElementById("temp").innerText = data.temp !== undefined ? data.temp : "--";
+                document.getElementById("humi").innerText = data.humi !== undefined ? data.humi : "--";
+                document.getElementById("light_val").innerText = data.light !== undefined ? data.light : "--";
+                document.getElementById("gas_val").innerText = data.gas !== undefined ? data.gas : "--";
+
+                // เงื่อนไขสถานะแสง (LDR)
+                const lStatus = document.getElementById("light_status");
+                if (data.light < 500) {
+                    lStatus.innerText = "สถานะ: มืด (เปิดไฟอัตโนมัติได้)";
                 } else {
-                    gasStatus.innerText = "สถานะ: ปกติ";
-                    gasStatus.className = "status-box";
+                    lStatus.innerText = "สถานะ: สว่าง";
+                }
+
+                // เงื่อนไขสถานะแก๊ส
+                const gStatus = document.getElementById("gas_status");
+                // ถ้าค่ามากกว่า 400 หรือถ้าเป็น Digital Sensor ค่า 1 คือตรวจเจอ
+                if (data.gas > 400 || data.gas == 1) { 
+                    gStatus.innerText = "⚠️ ตรวจพบควัน/แก๊ส!";
+                    gStatus.className = "status-box warning";
+                } else {
+                    gStatus.innerText = "สถานะ: ปกติ";
+                    gStatus.className = "status-box";
                 }
             }
+        }, (error) => {
+            console.error("Firebase Error: ", error);
         });
 
-        // ดึงสถานะปุ่ม
+        // 2. ดึงสถานะปุ่มจาก Path "control"
         db.ref("control").on("value", (snapshot) => {
             const data = snapshot.val();
             if (data) {
@@ -116,8 +132,11 @@
             }
         });
 
+        // 3. ฟังก์ชันส่งค่ากลับไปที่ Firebase
         function send(path, cmd) {
-            db.ref("control/" + path).set(cmd);
+            db.ref("control/" + path).set(cmd)
+                .then(() => console.log("Sent " + cmd + " to " + path))
+                .catch((err) => alert("ส่งข้อมูลไม่สำเร็จ: " + err.message));
         }
     </script>
 </body>
